@@ -36,8 +36,20 @@ func (r *runner) resume(c *config, id, runs string, db *sql.DB, lock *os.File) (
 	if viewer != saved.Owner || textAt(current, "assignee", "id") != viewer {
 		return errors.New("only the original owner, while still assigned, may resume this run; handoff is not supported")
 	}
-	if textAt(current, "project", "id") != saved.ProjectID || textAt(current, "team", "id") != saved.Route.TeamID || textAt(current, "state", "id") != saved.ProgressState || textAt(current, "title") != textAt(saved.Issue, "title") || textAt(current, "description") != textAt(saved.Issue, "description") || !reflect.DeepEqual(current["relations"], saved.Issue["relations"]) {
+	if textAt(current, "project", "id") != saved.ProjectID || textAt(current, "team", "id") != saved.Route.TeamID || textAt(current, "state", "id") != saved.ProgressState {
 		return errors.New("Linear route, status or requirements changed; inspect before resuming")
+	}
+	// An amended contract is refused unless the operator accepts it explicitly; acceptance
+	// re-freezes the run on the current title, description and relations.
+	accepted := contractChanges(saved.Issue, current)
+	if len(accepted) != 0 {
+		if !r.acceptChanges {
+			return errors.New("Linear route, status or requirements changed; inspect before resuming")
+		}
+		if err := acceptContractChanges(db, id, &saved, current, accepted); err != nil {
+			return err
+		}
+		fmt.Fprintf(r.out, "%s: accepted contract changes to %s\n", textAt(current, "identifier"), strings.Join(accepted, ", "))
 	}
 	if exists(filepath.Join(saved.Scratch, "finish-state-request.json")) || exists(filepath.Join(saved.Scratch, "finish-state.json")) {
 		return errors.New("completion was already requested or confirmed; inspect and reconcile instead of resuming")
@@ -140,6 +152,9 @@ func (r *runner) resume(c *config, id, runs string, db *sql.DB, lock *os.File) (
 		return err
 	}
 	prompt := fmt.Sprintf("Continue only this recorded issue and session in its existing checkout. Inspect partial work and the existing remote branch/PR before changing anything; do not repeat completed external actions. Read the current runner instructions at %s and the retained worklog. These instructions supersede prior runner policy; reassess workflow-only blockers without changing the original issue requirements. Trusted launch context: %s\nPreserve every original requirement and Git signing profile. Return only JSON matching this schema:\n%s\n", filepath.Join(saved.Scratch, "AGENT.md"), context, asset("result.schema.json"))
+	if len(accepted) != 0 {
+		prompt += " The Linear contract (" + strings.Join(accepted, ", ") + ") was amended after launch and the amendment is accepted: re-read issue.json and requirements.json in the scratch folder and satisfy the amended Requirements and Acceptance criteria; accepted-changes.json records what changed."
+	}
 	if err = writeFile(filepath.Join(archive, "prompt.txt"), []byte(prompt)); err != nil {
 		return err
 	}
