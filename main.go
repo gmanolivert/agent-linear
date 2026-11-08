@@ -25,6 +25,7 @@ import (
 var assets embed.FS
 
 type runner struct {
+	acceptChanges    bool
 	root, executable string
 	in               io.Reader
 	out, errOut      io.Writer
@@ -196,7 +197,7 @@ func (r *runner) cli() *cobra.Command {
 	}
 	for _, spec := range commands {
 		name := spec.name
-		var dryRun, setup, all, apply bool
+		var dryRun, setup, all, apply, acceptChanges bool
 		var issueRef string
 		cmd := &cobra.Command{Use: name, Short: spec.description, Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 			path, err := absPath(configPath)
@@ -206,6 +207,7 @@ func (r *runner) cli() *cobra.Command {
 			if cmd.Name() == "prune-sessions" {
 				dryRun = !apply
 			}
+			r.acceptChanges = acceptChanges
 			return r.execute(cmd.Name(), path, issueRef, dryRun, setup, all)
 		}}
 		switch name {
@@ -226,6 +228,9 @@ func (r *runner) cli() *cobra.Command {
 		}
 		if name == "reconcile" || name == "resume" {
 			cmd.Flags().StringVar(&issueRef, "issue", "", "Issue identifier or UUID of the recorded run")
+		}
+		if name == "resume" {
+			cmd.Flags().BoolVar(&acceptChanges, "accept-changes", false, "Accept an amended title, description or relations and re-freeze the run on the current contract")
 		}
 		cmd.PreRun = func(cmd *cobra.Command, args []string) { r.ctx = cmd.Context() }
 		root.AddCommand(cmd)
