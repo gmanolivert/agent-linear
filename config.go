@@ -20,6 +20,7 @@ type config struct {
 	Model           *string           `json:"model,omitempty"`
 	ReasoningEffort *string           `json:"model_reasoning_effort,omitempty"`
 	GH              string            `json:"gh"`
+	MinFreeBytes    uint64            `json:"min_free_bytes,omitempty"`
 	Projects        map[string]*route `json:"projects"`
 	projectOrder    []string
 }
@@ -127,6 +128,9 @@ func decodeConfig(data []byte) (*config, error) {
 		}
 	}
 	var c config
+	if value, present := raw["min_free_bytes"]; present && value == nil {
+		return nil, errors.New("min_free_bytes must be a nonnegative integer, or omitted")
+	}
 	if err := json.Unmarshal(data, &c); err != nil {
 		return nil, err
 	}
