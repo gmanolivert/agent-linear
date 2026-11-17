@@ -5,6 +5,7 @@
   "model_reasoning_effort": "medium",
   "opencode": "opencode",
   "gh": "gh",
+  "min_free_bytes": 0,
   "projects": {
     "LINEAR-PROJECT-UUID": {
       "team_id": "LINEAR-TEAM-UUID",

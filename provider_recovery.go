@@ -42,6 +42,10 @@ func (r *runner) recoverProvider(c *config, runs string, db *sql.DB, lock *os.Fi
 		fmt.Fprintf(r.out, "%s: waiting for provider; next probe after %s\n", id, time.Unix(retryAt, 0).UTC().Format(time.RFC3339))
 		return true, true, nil
 	}
+	if err = r.checkCapacity(c); err != nil {
+		fmt.Fprintln(r.out, err.Error())
+		return true, true, nil
+	}
 	// A crash after this checkpoint requires inspection, never a replay.
 	if err = stopProviderRecovery(db, id, "Automatic recovery interrupted or failed; inspect cron.log and retained checkout before manual resume/reconcile"); err != nil {
 		return true, false, err
@@ -67,6 +71,16 @@ func (r *runner) recoverProvider(c *config, runs string, db *sql.DB, lock *os.Fi
 		err = r.resume(c, id, runs, db, lock)
 	}
 	var limit *providerLimit
+	var capacity *capacityWait
+	if errors.As(err, &capacity) {
+		// Space may fall during the provider probe. No continuation has started;
+		// retain its original eligibility and retry time for a later poll.
+		if _, e := db.Exec("UPDATE provider_recoveries SET state='waiting',reason='Waiting for disk capacity' WHERE issue_id=?", id); e != nil {
+			return true, false, errors.Join(err, e)
+		}
+		fmt.Fprintln(r.out, capacity.Error())
+		return true, true, nil
+	}
 	if errors.As(err, &limit) && !limit.recordingFailed {
 		if e := saveCooldown(db, &resumed, limit); e != nil {
 			return true, false, errors.Join(err, e)

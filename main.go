@@ -32,6 +32,7 @@ type runner struct {
 	client           *http.Client
 	endpoint         string
 	command          func(string, ...string) (string, error)
+	availableBytes   func(string) (uint64, error)
 	preflightTimeout time.Duration
 	featureTimeout   time.Duration
 	ctx              context.Context
@@ -450,6 +451,12 @@ func (r *runner) execute(action, configPath, issueRef string, dryRun, setup, all
 			issue = fresh[0]
 		}
 		if err = r.runIssue(c, item.project, issue, runs, db, lock, action == "poll"); err != nil {
+			var capacity *capacityWait
+			if action == "poll" && errors.As(err, &capacity) {
+				pollOutcome, pollPhase = "deferred", "disk capacity"
+				fmt.Fprintln(r.out, capacity.Error())
+				return nil
+			}
 			if action == "poll" && errors.Is(err, errIssueBody) {
 				fmt.Fprintf(r.errOut, "%s: skipped: %v\n", textAt(issue, "identifier"), err)
 				continue
@@ -465,6 +472,12 @@ func (r *runner) execute(action, configPath, issueRef string, dryRun, setup, all
 	}
 	if action == "poll" && !dryRun {
 		if err = r.reviewAll(c, false, db, lock); err != nil {
+			var capacity *capacityWait
+			if errors.As(err, &capacity) {
+				pollOutcome, pollPhase = "deferred", "disk capacity"
+				fmt.Fprintln(r.out, capacity.Error())
+				return nil
+			}
 			var limit *providerLimit
 			if errors.As(err, &limit) && !limit.recordingFailed {
 				pollOutcome = "deferred"

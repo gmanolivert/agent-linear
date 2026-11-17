@@ -24,6 +24,9 @@ func (r *runner) runIssue(c *config, project string, issue map[string]any, runs 
 	if isClaimed(seen) {
 		return nil
 	}
+	if err = r.checkCapacity(c); err != nil {
+		return err
+	}
 	current, err := r.claimableIssue(id, project, rt)
 	if err != nil {
 		return err
@@ -87,6 +90,10 @@ func (r *runner) runIssue(c *config, project string, issue map[string]any, runs 
 		return nil
 	}
 	folder := filepath.Join(runs, id)
+	// Provider preflight can consume space; recheck before creating the claim.
+	if err = r.checkCapacity(c); err != nil {
+		return err
+	}
 	if err = os.Mkdir(folder, 0700); err != nil {
 		return err
 	}

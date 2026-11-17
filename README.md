@@ -233,6 +233,30 @@ that does not authorize the agent to trigger a separate deployment.
 
 ## Update an existing installation
 
+### Reserve disk space before starting work
+
+Set the top-level `min_free_bytes` to `8000000000` to require 8 GB of free space
+on the filesystem containing `.runs` before starting work. Omitted or zero
+preserves the prior behavior. The check uses space available to the runner user,
+excluding blocks reserved for root.
+
+The launcher checks each new issue, including between issues within one poll,
+and checks again after provider preflight before creating its claim. Low space
+or an unreadable capacity measurement defers the poll without claiming the next
+issue or starting an agent. Manual runs/resumes return a capacity error. Pending
+automatic continuations stay eligible and retain their checkout/session until
+space is available. Goal investigations and goal reviews also require the
+reserve, including their dry-run modes because those modes launch an agent.
+Read-only status, reconciliation, and issue-queue dry runs remain available.
+
+This gate does not delete files, invoke cleanup, interrupt active agents, or
+replace the worker lock. It is a dispatch check, not a quota on an active job.
+Configure cleanup separately and recheck actual free space afterward.
+Once enough space is available, the next normal poll can
+continue. Install the new binary before enabling this setting on a host;
+older binaries ignore it. Test a low-space deferral and healthy dispatch with
+synthetic fixtures before activation.
+
 Existing JSON configuration fields and the SQLite `runs` table remain compatible.
 `model_reasoning_effort` is an optional Codex setting; older configurations can
 continue omitting it.

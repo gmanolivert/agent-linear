@@ -12,6 +12,9 @@ import (
 )
 
 func (r *runner) resume(c *config, id, runs string, db *sql.DB, lock *os.File) (runErr error) {
+	if err := r.checkCapacity(c); err != nil {
+		return err
+	}
 	resolved, err := r.resolveIssueID(id)
 	if err != nil {
 		return err

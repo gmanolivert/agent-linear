@@ -552,6 +552,9 @@ func (r *runner) runGoal(c *config, project, promptText string, dryRun, autostar
 		return nil
 	}
 	goalsDir := filepath.Join(runs, "goals")
+	if err := r.checkCapacity(c); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(goalsDir, 0700); err != nil {
 		return err
 	}
@@ -822,6 +825,9 @@ func (r *runner) reviewGoal(c *config, goalID string, dryRun, sweep bool, viewer
 	} else {
 		feedback = allFeedback
 	}
+	if err = r.checkCapacity(c); err != nil {
+		return err
+	}
 	if err = writeJSON(filepath.Join(record.Folder, "goal-feedback.json"), map[string]any{"goal": goalID, "children": children, "comments": feedback, "all_comments": allFeedback}); err != nil {
 		return err
 	}
@@ -994,6 +1000,10 @@ func (r *runner) reviewAll(c *config, dryRun bool, db *sql.DB, lock *os.File) er
 	}
 	for _, record := range goals {
 		if err = r.reviewGoal(c, record.GoalID, dryRun, true, viewer, db, lock); err != nil {
+			var capacity *capacityWait
+			if errors.As(err, &capacity) {
+				return err
+			}
 			var limit *providerLimit
 			if errors.As(err, &limit) {
 				if e := saveCooldown(db, c, limit); e != nil {
